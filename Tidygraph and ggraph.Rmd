@@ -1,0 +1,196 @@
+---
+title: "Introduction to tidygraph & ggraph"
+author: "Steven Surya Tanujaya"
+date: "June 29, 2019"
+output: html_document
+---
+
+First, let set use the following library.
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidygraph)
+library(ggraph)
+```
+
+# Simple Functionality
+
+You can create a simple graph by using `create_*()` and a random simple graph by using `play_*()`. The baseR `plot()` function also works on this object.
+```{r}
+#Create
+create_ring(8)
+plot(create_ring(8))
+
+#Play
+set.seed(13)
+play_erdos_renyi(n = 8,m=13)
+plot(play_erdos_renyi(n = 8,m=13,directed=F))
+
+play_erdos_renyi(n=8,p=0.2,directed = F)
+plot(play_erdos_renyi(n=8,p=0.2,directed=F))
+```
+
+Here I use media dataset to demonstrate the `tidygraph` and `ggraph` packages. You can create graph object using `tbl_graph` by providing nodes and edges dataset.
+```{r}
+media.edge<-read.csv("data/Dataset1-Media-Example-EDGES.csv")
+media.node<-read.csv("data/Dataset1-Media-Example-NODES.csv")
+
+media<-tbl_graph(media.node,media.edge)
+media
+
+plot(media)
+```
+
+There is `activate()` function to access the nodes or the edges dataset. Since `tidygraph` was built under `dplyr` environment, any functionality in `dplyr` package is also can be accessed.
+```{r}
+media %>% activate(edges) %>% as_tibble()
+media %>% activate(nodes) %>% as_tibble()
+
+media_list<-media %>% activate(nodes) %>% pull(media)
+media_list
+```
+
+Here is some example of how you subset the graph based on certain category.
+```{r}
+media_h <- media %>% activate(edges) %>% filter(type=="hyperlink") 
+plot(media_h)
+
+media_m <- media %>% activate(edges) %>% filter(type=="mention")
+plot(media_m)
+
+```
+
+Lastly, you can also join and bind some graph. See the results below to observe about the difference between `graph_join()` and `bind_graphs()`. 
+
+```{r}
+set.seed(100)
+media_m %>% graph_join(media_h) %>% plot()
+media %>% plot()
+
+media_m %>% plot()
+media_h %>% plot()
+media_m %>% bind_graphs(media_h) %>% plot()
+```
+
+# Ggraph Package
+
+From now and so on, I just use `media_m` as a dataset. `ggraph` package uses some similar property as in `igraph` package and same  grammar as in `ggplot` package. You can access graph layout from `igraph` to be implemented in `ggraph`. The layout list can be viewed by typing `layout_with_` (and click 'tab' button) in `igraph` package. Once you decide to use `layout_with_*` from `igraph` in `ggraph`, you can just add `layout=*` as input in `ggraph` function.
+
+The standard graph visualization is as follows.
+
+```{r}
+media_m %>%
+  ggraph(layout = "kk") +
+    geom_node_point() +
+    geom_edge_link() 
+```
+
+Here, you can adjust the node and edge style using some provided style in `ggraph` by using `geom_node_*` and `geom_edge_*`.
+
+```{r}
+media_m %>%
+  ggraph(layout = "gem") +
+    geom_node_point() +
+    geom_edge_diagonal() 
+```
+
+Furthermore, there are some visualization techniques, using `aes()` such as in `ggplot()`. You can also use theme here. 
+
+```{r}
+media_m %>%
+  ggraph(layout = "sugiyama") +
+    geom_node_text(aes(label = media, color = type.label), size=3) +     geom_edge_diagonal(color = "gray", alpha = 0.4) +theme_graph()
+```
+
+Notice that the direction/arrow of edges are not appear, so the graph is interpreted as undirected graph. You can just add `arrow()` attribute in order to make it appears.  
+
+```{r}
+set.seed(100) 
+media_m %>% 
+ggraph(layout = 'graphopt') + 
+    geom_edge_link(arrow = arrow(length = unit(2, 'mm')), 
+                   end_cap = circle(3, 'mm')) + 
+    geom_node_point(size = 3) +  geom_node_text(aes(label = media, color = type.label), size=3,repel = T) + theme_graph()
+```
+
+Facetting graph using some category is also possible. 
+
+```{r}
+media_m1<-media_m %>% activate(nodes)%>%  mutate(graph="Mention")
+media_h1<-media_h %>% activate(nodes)%>%  mutate(graph="Hyperlink")
+
+ggraph(bind_graphs(media_m1,media_h1), layout = 'nicely') + 
+    geom_edge_link(arrow = arrow(length = unit(2, 'mm')), 
+                   end_cap = circle(3, 'mm')) + 
+    geom_node_point(size = 3) +  geom_node_text(aes(label = media, color = type.label), size=3,repel = T) +
+    facet_nodes(~graph) + 
+    theme_graph(foreground = 'steelblue')
+```
+
+# Graph Manipulation
+
+Here, `morph()` function is introduced. This function play a crucial role in graph manipulation, it provides us with some graph manipulation techniques that can be applied without changing the graph structure. For example, here I demonstrate how to find the shortest path between "Reuters.com" and "FOX News". 
+
+```{r}
+from <- which(media_list == "Reuters.com")
+to <-  which(media_list == "FOX News")
+
+shortest <- media_m %>%
+  morph(to_shortest_path, from, to, weights = weight)
+
+#example of unmorph() to create new tbl_graph
+shortest %>%
+  mutate(selected_node = TRUE) %>%
+  unmorph()
+
+shortest <- shortest %>%
+  activate(nodes) %>% 
+  mutate(selected_node = TRUE) %>%
+  activate(edges) %>%
+  mutate(selected_edge = TRUE) %>%
+  unmorph() 
+
+shortest %>% activate(edges) %>% as_tibble()
+shortest %>% activate(nodes) %>% as_tibble()
+
+#Label the NA with 1 and True with 2, then order them
+shortest <- shortest %>%
+  activate(nodes) %>%
+  mutate(selected_node = ifelse(is.na(selected_node), 1, 2)) %>%
+  activate(edges) %>%
+  mutate(selected_edge = ifelse(is.na(selected_edge), 1, 2)) %>%
+  arrange(selected_edge)
+
+shortest %>%
+ggraph(layout = 'graphopt') + 
+    geom_edge_link(aes(alpha=selected_edge),color="gray", arrow = arrow(length = unit(2, 'mm')), 
+                   end_cap = circle(3, 'mm')) + 
+    geom_node_point(size = 3) +  geom_node_text(aes(label = media, color = type.label), size=3,repel = T) 
+
+```
+
+Additional: Centrality measurement
+There are some measurements of centrality in graph, some of them are provided in `tidygraph`. They can ne accessed through `centrality_*` when you 'activate' nodes of the graph.
+
+For instance, `centrality_betweeness()` measure the centrality of every nodes by calculating how many shortest path containing that node in the network. This can be visualized to give you information about how important each node in the term of graph/network connectivity.
+
+```{r}
+set.seed(100)
+media_m %>%
+  activate(nodes) %>%
+  mutate(centrality = centrality_betweenness()) %>% 
+  ggraph(layout = "graphopt") + 
+  geom_edge_link(width = 1, colour = "lightgray") +
+  geom_node_point(aes(size = centrality, colour = centrality)) +
+  geom_node_text(aes(label = media), repel = TRUE)+
+  scale_color_gradient(low = "yellow", high = "red")+
+  theme_graph()
+```
+
+
+Reference:
+
+- https://rviews.rstudio.com/2019/03/06/intro-to-graph-analysis/
+- http://www.sthda.com/english/articles/33-social-network-analysis/136-network-analysis-and-manipulation-using-r/
+- https://www.data-imaginist.com/2017/introducing-tidygraph/
+- https://github.com/thomasp85/tidygraph
