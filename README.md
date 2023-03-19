@@ -8,11 +8,11 @@ similar syntax structure. Which means, modification is given layer-by-layer by u
 The following visualization is one of the result in this project. The arrow from A to B means that there exists hyperlink(s) for accessing B directly 
 from A.
 
-<img src="ggraph.png" width="500" height="250">
+<img src="ggraph.png" width="500" height="400">
 
 
 Additionally, some algorithm related to network is also accessible through `tidygraph`, such as Djikstra's Algorithm for shortest path, as follows
 
-<img src="shortest path.png" width="500" height="250">
+<img src="shortest path.png" width="500" height="400">
 
 For HTML version of the code and the result, click [here](https://www.rpubs.com/Steven_Surya/tidygraph-ggraph)
